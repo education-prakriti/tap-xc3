@@ -115,6 +115,8 @@ variable "s3_prefixes" {
     project_spend_prefix     = "cost-metrics/project_cost.json"
     monthly_cost_prefix      = "cost-metrics/total_account_cost.json"
     expensive_service_prefix = "cost-metrics/expensive-services"
+    project_breakdown_cost_prefix = "cost-metrics/project_breakdown_cost.json"
+
   }
 }
 
