@@ -18,7 +18,7 @@ data "archive_file" "project_spend_cost" {
   output_path = "${path.module}/project_spend_cost.zip"
 }
 
-data "archive_file" "project_cost_breakdown" {
+data "archive_file" "project_breakdown_cost" {
   type        = "zip"
   source_file = "../src/budget_details/project_breakdown_cost.py"
   output_path = "${path.module}/project_breakdown_cost.zip"
@@ -103,7 +103,7 @@ resource "aws_lambda_function" "ProjectSpendCost" {
       prometheus_ip        = "${var.prometheus_ip}:9091"
       bucket_name          = var.s3_xc3_bucket.bucket
       project_spend_prefix = var.s3_prefixes.project_spend_prefix
-      lambda_function_name = aws_lambda_function.ProjectCostBreakdown.arn
+      lambda_function_name = aws_lambda_function.ProjectBreakdownCost.arn
     }
   }
   memory_size = var.memory_size
@@ -119,15 +119,15 @@ resource "aws_lambda_function" "ProjectSpendCost" {
 
 }
 
-resource "aws_lambda_function" "ProjectCostBreakdown" {
+resource "aws_lambda_function" "ProjectBreakdownCost" {
   #ts:skip=AWS.LambdaFunction.LM.MEIDUM.0063 We are aware of the risk and choose to skip this rule
   #ts:skip=AWS.LambdaFunction.Logging.0470 We are aware of the risk and choose to skip this rule
   #ts:skip=AWS.LambdaFunction.EncryptionandKeyManagement.0471 We are aware of the risk and choose to skip this rule
-  function_name = "${var.namespace}-project-cost-breakdown"
+  function_name = "${var.namespace}-project-breakdown-cost"
   role          = aws_iam_role.ProjectSpendCost.arn
   runtime       = "python3.9"
-  handler       = "project_cost_breakdown.lambda_handler"
-  filename      = data.archive_file.project_cost_breakdown.output_path
+  handler       = "project_breakdown_cost.lambda_handler"
+  filename      = data.archive_file.project_breakdown_cost.output_path
   environment {
     variables = {
       prometheus_ip        = "${var.prometheus_ip}:9091"
@@ -144,7 +144,7 @@ resource "aws_lambda_function" "ProjectCostBreakdown" {
     security_group_ids = [var.security_group_id]
   }
 
-  tags = merge(local.tags, tomap({ "Name" = "${var.namespace}-project_cost_breakdown_function" }))
+  tags = merge(local.tags, tomap({ "Name" = "${var.namespace}-project_breakdown_cost_function" }))
 
 }
 
@@ -152,6 +152,13 @@ resource "terraform_data" "delete_project_spend_cost_zip_file" {
   triggers_replace = [aws_lambda_function.ProjectSpendCost.arn]
   provisioner "local-exec" {
     command = "rm -r ${data.archive_file.project_spend_cost.output_path}"
+  }
+}
+
+resource "terraform_data" "delete_project_breakdown_cost_zip_file" {
+  triggers_replace = [aws_lambda_function.ProjectBreakdownCost.arn]
+  provisioner "local-exec" {
+    command = "rm -r ${data.archive_file.project_breakdown_cost.output_path}"
   }
 }
 

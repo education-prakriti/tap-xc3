@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 
-#        http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -39,7 +39,6 @@ try:
 except Exception as e:
     logging.error("Error creating boto3 client for lambda: " + str(e))
 
-
 cost_by_days = 30
 end_date = str(datetime.datetime.now().date())
 start_date = str(datetime.datetime.now().date() - timedelta(days=cost_by_days))
@@ -72,6 +71,32 @@ def cost_of_project(ce_client, start_date, end_date):
         return None
 
 
+def invoke_project_breakdown_lambda(project_name):
+    project_breakdown_lambda = os.environ["lambda_function_name"]
+    try:
+        payload = {"project_name": project_name}
+        response = lambda_client.invoke(
+            FunctionName=project_breakdown_lambda,
+            InvocationType="Event",
+            Payload=json.dumps(payload),
+        )
+        status_code = response["StatusCode"]
+        if status_code != 202:
+            print(f"Unexpected status code {status_code} from project_breakdown_lambda")
+    except Exception as e:
+        print("Error invoking lambda function:", e)
+        return {
+            "statusCode": 500,
+            "body": "Error invoking expensive_service_lambda",
+        }
+
+
+def process_project_costs(project_dict):
+    for project_name in project_dict.keys():
+        print("Processing project:", project_name)
+        invoke_project_breakdown_lambda(project_name)
+
+
 def lambda_handler(event, context):
     """
     The main function that is executed when the AWS Lambda function is triggered.
@@ -79,8 +104,6 @@ def lambda_handler(event, context):
     Returns:
         str: A message indicating the success or failure of the function execution.
     """
-
-    project_breakdown_lambda = os.environ["lambda_function_name"]
 
     try:
         registry = CollectorRegistry()
@@ -120,35 +143,11 @@ def lambda_handler(event, context):
         push_to_gateway(
             os.environ["prometheus_ip"], job="Project-Spend-Cost", registry=registry
         )
-
-        for project_name in project_dict.keys():
-            print(project_name)
-            payload = {'project_name': project_name}
-            try:
-                project_breakdown_lambda_response = lambda_client.invoke(
-                    FunctionName=project_breakdown_lambda,
-                    InvocationType="Event",
-                    Payload=json.dumps(payload),
-                )
-                # Extract the status code from the response
-                status_code = project_breakdown_lambda_response["StatusCode"]
-                if status_code != 202:
-                    # Handle unexpected status code
-                    logging.error(
-                        f"Unexpected status code {status_code} returned from project_breakdown_lambda"
-                    )
-            except Exception as e:
-                logging.error("Error in invoking lambda function: " + str(e))
-                return {
-                    "statusCode": 500,
-                    "body": "Error invoking expensive_service_lambda",
-                }
-
+        process_project_costs(project_dict)
         return {"statusCode": 200, "body": json_data}
     except botocore.exceptions.ClientError as e:
         logging.error(f"Failed to upload file to S3: {e}")
         return {"statusCode": 500, "body": "Failed to upload file to S3."}
-
     except Exception as e:
         logging.error(f"Error executing lambda_handler: {e}")
         return "Failed to execute. Please check logs for more details."
